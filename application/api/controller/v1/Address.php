@@ -9,6 +9,7 @@
 namespace app\api\controller\v1;
 
 
+use app\api\controller\BaseController;
 use app\api\controller\validate\AddressNew;
 use app\api\service\Token as TokenService;
 use app\api\model\User as UserModel;
@@ -19,27 +20,11 @@ use app\lib\exception\TokenException;
 use app\lib\exception\UserException;
 use think\Controller;
 
-class Address extends Controller
+class Address extends BaseController
 {
     protected $beforeActionList = [
         'checkPrimaryScope' => ['only' => 'createOrUpdateAddress']
     ];
-
-    protected function checkPrimaryScope(){
-        $scope = TokenService::getCurrentTokenVar('scope');
-        //判断有没有token，是不是已经过期了
-        if($scope){
-            if($scope >= ScopeEnum::User){
-                return true;
-            }
-            else{
-                throw new ForbiddenException();
-            }
-        }
-        else{
-            throw new TokenException();
-        }
-    }
 
     public function createOrUpdateAddress(){
         $validate = new AddressNew();
