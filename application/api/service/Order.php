@@ -14,6 +14,7 @@ use app\api\model\Product;
 use app\api\model\UserAddress;
 use app\lib\exception\OrderException;
 use app\lib\exception\UserException;
+use think\Db;
 use think\Exception;
 
 class Order
@@ -39,11 +40,13 @@ class Order
 
         // 开始创建订单快照
         $orderSnap = $this->snapOrder($status);
-
-
+        $order = $this->createOrder($orderSnap);
+        $order['pass'] = true;
+        return $order;
     }
 
     private function createOrder($snap){
+        Db::startTrans(); //开启事务
         try
         {
             $orderNo = $this->makeOrderNo();
@@ -56,15 +59,18 @@ class Order
             $order->snap_name = $snap['snapName'];
             $order->snap_img = $snap['snapImg'];
             $order->snap_address = $snap['snapAddress'];
-
             $order->save();
+
             $orderID = $order->id;
             $create_time = $order->create_time;
             foreach ($this->oProducts as &$p) {
                 $p['order_id'] = $orderID;
             }
+
             $orderProduct = new OrderProduct();
             $orderProduct->saveAll($this->oProducts);
+
+            Db::commit(); //如果都成功就提交
             return [
                 'order_no' => $orderNo,
                 'order_id' => $orderID,
@@ -73,6 +79,7 @@ class Order
         }
         catch (Exception $ex)
         {
+            Db::rollback(); //如果有一方写入失败，就回滚
             throw $ex;
         }
     }
@@ -107,6 +114,7 @@ class Order
         if(count($this->products) > 1){
             $snap['snapName'] .= '等';
         }
+        return $snap;
     }
 
     private function getUserAddress(){
@@ -119,6 +127,15 @@ class Order
             ]);
         }
         return $userAddress->toArray();
+    }
+
+    public function checkOrderStock($orderID){
+        $oProducts = OrderProduct::where('order_id' ,'=', $orderID)
+            ->select();
+        $this->oProducts = $oProducts;
+        $this->products = $this->getProductsByOrder($oProducts);
+        $status = $this->getOrderStatus();
+        return $status;
     }
 
     private function getOrderStatus(){
@@ -141,9 +158,8 @@ class Order
             $status['orderPrice'] += $pStatus['totalPrice'];
             $status['totalCount'] += $pStatus['count'];
             array_push($status['pStatusArray'], $pStatus);
-            return $status;
         }
-
+        return $status;
     }
 
     private function getProductStatus($oPID, $oCount, $products){
