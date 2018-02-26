@@ -63,6 +63,7 @@ class Order
 
             $orderID = $order->id;
             $create_time = $order->create_time;
+            // 将创建成功的订单id插入到oProducts数组中，然后更新order_product数据表
             foreach ($this->oProducts as &$p) {
                 $p['order_id'] = $orderID;
             }
@@ -84,6 +85,10 @@ class Order
         }
     }
 
+    /**
+     * 随机字符串算法生成唯一订单号
+     * @return string
+     */
     public static function makeOrderNo()
     {
         $yCode = array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J');
@@ -94,7 +99,11 @@ class Order
         return $orderSn;
     }
 
-    // 生成订单快照
+    /**
+     * 生成订单快照
+     * @param $status
+     * @return array
+     */
     private function snapOrder($status){
         $snap = [
             'orderPrice' => 0,
@@ -117,6 +126,12 @@ class Order
         return $snap;
     }
 
+    /**
+     * 获取当前下单用户的收货地址
+     * 如果收获地址不存在，则不允许下单，也就是要抛出下单失败的异常
+     * @return array
+     * @throws UserException
+     */
     private function getUserAddress(){
         $userAddress = UserAddress::where('user_id', $this->uid)
             ->find();
@@ -129,6 +144,12 @@ class Order
         return $userAddress->toArray();
     }
 
+    /**
+     * 库存量检测
+     * 返回选定的商品通过检测处理后的详细信息
+     * @param int $orderID
+     * @return array
+     */
     public function checkOrderStock($orderID){
         $oProducts = OrderProduct::where('order_id' ,'=', $orderID)
             ->select();
@@ -138,6 +159,15 @@ class Order
         return $status;
     }
 
+    /**
+     * 获取订单状态
+     * 是订单综合信息的一个汇总
+     * 计算整个订单的总金额，订单中商品的总数量，每个商品的真实信息（以array形式返回）
+     *
+     * 只要订单中有一个商品出现异常（在下单支付前已下架或删除，则商品id无效）
+     * 或其中一个商品库存量不足，则整个订单就创建失败 pass = false
+     * @return array
+     */
     private function getOrderStatus(){
         $status = [
             'pass' => true,
@@ -162,6 +192,19 @@ class Order
         return $status;
     }
 
+    /**
+     * 获取单个商品的真实状态
+     * 用户订单中的某个商品有可能已下架、被删除，所以在下单支付前要每一个都检测。
+     * 这种情况就属于某个product_id实际已不存在，因而需要直接抛出异常处理。
+     * 此外，还要检测库存量。
+     * 如果有库存量，haveStock = true; 否则，haveStock = false;
+     * 把以上每个商品的检测处理情况，逐一返回调用这个接口的上一层函数再进行处理。
+     * @param $oPID
+     * @param $oCount
+     * @param $products
+     * @return array
+     * @throws OrderException
+     */
     private function getProductStatus($oPID, $oCount, $products){
 
         $pIndex = -1;
@@ -200,7 +243,14 @@ class Order
 
     }
 
-    // 根据订单信息查找真实的商品信息
+
+    /**
+     * 根据订单信息查找真实的商品信息
+     * 通过visible() 只显示返回'id', 'price', 'stock', 'name', 'main_img_url' 这几个主要字段
+     * 用toArray() 将collection 类型转换为数组再返回
+     * @param $oProducts
+     * @return mixed
+     */
     private function getProductsByOrder($oProducts){
         $oPIDs = [];
         foreach ($oProducts as $item) {
